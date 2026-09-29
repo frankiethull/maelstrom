@@ -1,0 +1,120 @@
+---
+title: "Getting started with maelstrom"
+vignette: >
+  %\VignetteIndexEntry{Getting started with maelstrom}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+library(maelstrom)
+```
+
+## What this is
+
+maelstrom is a live-coding pattern engine in R. A pattern is a function
+of time: give it a time span, it tells you which musical events happen
+there. You write patterns in a compact mini-notation, shape them with
+pipes, layer them with `stack()`, and render the result to WAV.
+
+```{r}
+s("bd sd hh cp")
+```
+
+That is a pattern. It does not make sound yet; it describes events. To
+hear it, you render it.
+
+## Mini-notation
+
+`s()` takes sound names. `note()` takes pitches. `n()` takes numbers
+(MIDI notes or ratios).
+
+```{r}
+s("bd sd hh cp")
+note("c3 eb3 g3 bb3")
+n("0 2 4 7")
+```
+
+The building blocks:
+
+* `"~"` is a rest: `s("bd ~ sd ~")`
+* `"*"` repeats: `"hh*8"` is eight hi-hats per cycle
+* `"/"` slows down: `"bd/2"` plays every other cycle
+* `"[ ]"` groups steps into one slot: `"bd [sd hh] cp"`
+* `"bd(3,8)"` is a Euclidean rhythm: 3 hits spread over 8 steps
+
+```{r}
+vapply(query_arc(s("bd(3,8)"), 0, 1), hap_onset, numeric(1))
+```
+
+Three kick onsets, evenly spread. That is the whole idea: strings in,
+structured time out.
+
+## Pipes, pattern first
+
+Every combinator takes the pattern first, so base R's `|>` reads like a
+signal chain:
+
+```{r}
+s("bd*4") |> gain(0.8) |> lpf(1200)
+```
+
+Nothing has rendered yet. This is still a description: four kicks per
+cycle, a bit quieter, lowpassed at 1200 Hz. You can keep chaining:
+`pan()`, `echo()`, `swing()`, `drive()`, all the same shape.
+
+## Layers with stack()
+
+`stack()` plays patterns at the same time:
+
+```{r}
+kick  <- s("bd*4")
+snare <- s("~ sd ~ sd")
+hats  <- s("hh*8") |> swing(0.3) |> gain(0.5)
+
+groove <- stack(kick, snare, hats)
+```
+
+Name your layers whatever you like. (The internal pattern constructor is
+called `ms_pattern()`, precisely so a variable named `pattern` never
+collides with it.)
+
+## Rendering to WAV
+
+`render()` turns cycles of a pattern into samples. `write_wav()` writes
+them out.
+
+```{r}
+w <- render(groove, cycles = 2, cps = 1)
+length(w)   # 2 cycles at 1 cycle/sec = 2 seconds of audio
+max(abs(w)) # peaks are kept at or under 1
+```
+
+```{r}
+wav <- file.path(tempdir(), "groove.wav")
+write_wav(wav, w)
+wav
+```
+
+`cps` is cycles per second: the tempo knob. `render_stereo()` gives you a
+2-row stereo matrix instead, with per-event panning from `pan()`.
+
+## A complete tiny track
+
+Put it together: drums, a bass line, and a plucky lead with echo.
+
+```{r}
+bass <- note("c2 c2 g1 a1") |> synth("sine") |> lpf(400) |> gain(0.9)
+lead <- note("c4 ~ eb4 ~") |> synth("pluck") |> gain(0.5) |>
+  echo(n = 3, time = 0.25, fb = 0.4)
+
+track <- stack(kick, snare, hats, bass, lead)
+w <- render(track, cycles = 4, cps = 1)
+write_wav(file.path(tempdir(), "tiny_track.wav"), w)
+length(w)
+```
+
+Four seconds, five layers, one file. From here, the
+sound-design vignette tours the voices and effects, and the generative
+vignette covers Euclidean rhythms, polymeter, and deterministic chance.

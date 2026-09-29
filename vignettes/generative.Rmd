@@ -1,0 +1,130 @@
+---
+title: "Generative patterns in maelstrom"
+vignette: >
+  %\VignetteIndexEntry{Generative patterns in maelstrom}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+library(maelstrom)
+```
+
+## Euclidean rhythms
+
+`euclid()` keeps only the hits of a Bjorklund distribution. So does the
+mini-notation: `"bd(3,8)"` and `euclid(s("bd*8"), 3, 8)` are the same
+rhythm.
+
+```{r}
+a <- vapply(query_arc(s("bd(3,8)"), 0, 1), hap_onset, numeric(1))
+b <- vapply(query_arc(euclid(s("bd*8"), 3, 8), 0, 1), hap_onset, numeric(1))
+a
+identical(round(a, 9), round(b, 9))
+```
+
+Rotation shifts the pattern: `s("bd(3,8,2)")` starts two steps later.
+Classic starting points: `bd(3,8)`, `hh(5,8)`, `cp(2,8)`.
+
+## Polymeter with stack()
+
+Layers do not have to agree on a cycle length. Stack a 3-step pattern
+against a 4-step and a 5-step and they drift against each other,
+locking back together every 60 steps:
+
+```{r}
+poly <- stack(s("bd*3"), s("hh*4"), s("cp*5"))
+length(query_arc(poly, 0, 1))  # 3 + 4 + 5 events in one cycle
+```
+
+The `{a b, x y z}` mini-notation does the same thing inline:
+`"{bd*3, hh*4}"`.
+
+## Arpeggiate chords
+
+`chord()` stacks notes into one event. `arp()` splits simultaneous
+chord tones back into equal time slices, low to high:
+
+```{r}
+arped <- chord("c4", "e4", "g4") |> arp()
+vapply(query_arc(arped, 0, 1), hap_onset, numeric(1))
+```
+
+One cycle, three slices. Drums and single notes pass through `arp()`
+untouched, so you can arpeggiate a whole stack safely.
+
+## Humanize and transpose
+
+`humanize()` adds deterministic timing and velocity jitter, keyed by
+event position, so the same pattern always humanizes the same way:
+
+```{r}
+tight <- s("bd*4")
+loose <- s("bd*4") |> humanize(0.01, 0.15)
+o1 <- vapply(query_arc(tight, 0, 1), hap_onset, numeric(1))
+o2 <- vapply(query_arc(loose, 0, 1), hap_onset, numeric(1))
+round(o2 - o1, 4)
+```
+
+`transpose()` shifts pitches by semitones:
+
+```{r}
+up <- note("c4 e4 g4") |> transpose(7)
+vapply(query_arc(up, 0, 1), function(h) h$value$note, character(1))
+```
+
+## every: form over time
+
+`every(n, fn)` applies `fn` once every `n` cycles. The classic use is
+variation: a fill every 4 cycles, a reversal every 8.
+
+```{r}
+p <- s("bd*4") |> every(4, function(x) rev(x))
+o3 <- vapply(query_arc(p, 0, 4), hap_onset, numeric(1))
+length(o3)  # 16 kicks across 4 cycles, one cycle reversed
+```
+
+## Deterministic chance
+
+`degrade()` drops events with a probability. It looks random, but it is
+seeded per event: render the same pattern twice, get the same audio.
+
+```{r}
+thin <- s("hh*16") |> degrade(0.5)
+n1 <- length(query_arc(thin, 0, 1))
+n2 <- length(query_arc(thin, 0, 1))
+c(n1, n2)
+identical(
+  render(thin, cycles = 1, cps = 1),
+  render(thin, cycles = 1, cps = 1)
+)
+```
+
+Same count, bit-identical audio. `sometimes()`, `often()`, `rarely()`,
+and the `"bd?"` mini-notation all work the same way: chance you can
+reproduce.
+
+## A generative sketch
+
+Euclidean drums, a polymeter hat layer, an arpeggiated chord that
+changes every 4 cycles, and a humanized kick:
+
+```{r}
+drums <- stack(
+  s("bd(3,8)") |> humanize(0.008, 0.1),
+  s("~ sd(2,8) ~"),
+  s("hh(5,8)") |> gain(0.5)
+)
+harmony <- chord("c3", "eb3", "g3", "bb3") |> arp() |> synth("pluck") |>
+  every(4, function(x) transpose(x, -2)) |> gain(0.6)
+
+sketch <- stack(drums, harmony)
+w <- render(sketch, cycles = 4, cps = 1)
+write_wav(file.path(tempdir(), "generative_sketch.wav"), w)
+length(w)
+```
+
+Four seconds. Nothing in it was placed by hand except the chord and the
+Euclidean parameters; the rest is structure. Change the numbers, get a
+different piece with the same bones.

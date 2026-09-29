@@ -1,0 +1,7 @@
+#!/bin/bash
+# maelstrom: live-coding pattern engine CLI.
+# Usage: maelstrom render FILE -o out.wav [-d seconds] [--cps CPS]
+#        maelstrom validate FILE
+set -e
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec Rscript "$ROOT/exec/cli.R" "$@"

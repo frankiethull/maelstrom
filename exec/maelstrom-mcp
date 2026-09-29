@@ -1,0 +1,9 @@
+#!/bin/bash
+# maelstrom-mcp: stdio MCP server for the maelstrom pattern engine.
+# Usage: add to your MCP client config, e.g.
+#   { "command": "/path/to/maelstrom/exec/maelstrom-mcp", "args": [] }
+# Requires the maelstrom package installed (R CMD INSTALL .) and the
+# mcptools + ellmer R packages (install.packages(c("mcptools", "ellmer"))).
+set -e
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec Rscript --vanilla "$ROOT/exec/mcp-server.R"

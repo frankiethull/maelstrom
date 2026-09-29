@@ -1,0 +1,124 @@
+---
+title: "Sound design in maelstrom"
+vignette: >
+  %\VignetteIndexEntry{Sound design in maelstrom}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+library(maelstrom)
+```
+
+## Two drum kits
+
+maelstrom ships two drum kits. The default is fully synthesized; the
+acoustic kit has a pitched kick, a tonal snare, and metallic hats.
+Pick one per event with `kit()`:
+
+```{r}
+synth_kit    <- s("bd sd hh oh") |> kit("synth")
+acoustic_kit <- s("bd sd hh oh") |> kit("acoustic")
+```
+
+Voices missing from the acoustic kit fall back to the synth kit, so you
+can mix freely. The hat family (`hh`, `oh`, `shaker`) is leveled
+internally to sit about 6-10 dB under the kick at the same gain; push
+them with `gain()` if you want them hotter.
+
+## The drum palette
+
+Eleven synthesized voices, one per name:
+
+```{r}
+all_drums <- s("bd sd hh oh cp tom rim shaker ride crash conga")
+w <- render(all_drums, cycles = 1, cps = 0.5)
+length(w)  # one 2-second cycle, one hit per voice
+```
+
+`bd` kick, `sd` snare, `hh` closed hat, `oh` open hat, `cp` clap,
+`tom`, `rim` rimshot, `shaker`, `ride`, `crash`, `conga`.
+
+## Synth voices
+
+`synth()` picks the oscillator for pitched notes. Five raw oscillators
+plus four built voices:
+
+```{r}
+for (v in c("sine", "sawtooth", "square", "triangle", "noise")) {
+  w <- render(note("a3") |> synth(v), cycles = 1, cps = 1)
+  cat(v, "peak:", round(max(abs(w)), 3), "\n")
+}
+```
+
+```{r}
+for (v in c("pluck", "pad", "sub", "lead")) {
+  w <- render(note("a3") |> synth(v), cycles = 1, cps = 1)
+  cat(v, "peak:", round(max(abs(w)), 3), "\n")
+}
+```
+
+`pluck` is a decaying Karplus-ish voice, `pad` is slow-attacking and
+wide, `sub` is a deep sine stack, `lead` is a bright saw. Pair them with
+`attack()` to shape the envelope:
+
+```{r}
+w <- render(note("c4") |> synth("pad") |> attack(0.2), cycles = 1, cps = 0.5)
+max(abs(w))
+```
+
+## Filters, static and moving
+
+`lpf()` takes a cutoff in Hz. It also takes a mini-notation string or a
+pattern of numbers, and then the cutoff moves per event:
+
+```{r}
+static <- note("c3") |> synth("sawtooth") |> lpf(800)
+moving <- s("bd*4") |> lpf(n("400 800 1600 3200"))
+w <- render(moving, cycles = 1, cps = 1)
+length(w)
+```
+
+Strings are parsed eagerly, so a typo like `lpf("oops")` fails when you
+compose the pattern, not halfway through a render.
+
+## Effects
+
+Per-event effects, all pattern-first:
+
+```{r}
+s("bd*4") |> drive(2)                        # soft saturation
+note("c3") |> synth("sawtooth") |> crush(4)  # bitcrush to 4 bits
+note("c4") |> synth("pad") |> chorus(6)      # modulated short delay
+s("bd ~ sd ~") |> echo(n = 3, time = 0.25, fb = 0.5)
+```
+
+`echo(n, time, fb)` adds `n` repeats, each `time` cycles later and
+decaying by `fb`. `pan(x)` places events left (0) to right (1); it only
+matters in a stereo render:
+
+```{r}
+w <- render_stereo(s("bd*4") |> pan(0.2), cycles = 1, cps = 1)
+dim(w)  # 2 rows: left, right
+```
+
+`add_reverb()` works on rendered audio, mono or stereo. The wet signal
+is computed in Rust, bit-exact with the pure-R reference, about 2000x
+faster:
+
+```{r}
+wet <- add_reverb(w, amount = 0.3)
+dim(wet)
+```
+
+Chain them like anything else. A dubby snare:
+
+```{r}
+dub_snare <- s("~ sd ~ sd") |> echo(n = 4, time = 0.375, fb = 0.5) |>
+  pan(0.6) |> gain(0.8)
+w <- render_stereo(stack(s("bd*4"), dub_snare), cycles = 2, cps = 1)
+wet <- add_reverb(w, 0.25)
+write_wav(file.path(tempdir(), "dub_snare.wav"), wet)
+dim(wet)
+```

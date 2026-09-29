@@ -1,0 +1,27 @@
+Package: maelstrom
+Type: Package
+Title: A Clean-Room Live-Coding Pattern Engine
+Version: 0.1.0
+Authors@R: c(person("Frank", "Hull", email = "frankiethull@proton.me",
+    role = c("aut", "cre")),
+    person("nobu", role = "ctb",
+    comment = "Muse by Meta (personal AI agent)"),
+    person("OpenCode", role = "ctb",
+    comment = "Muse Spark 1.3 (AI co-builder)"))
+Description: Patterns as functions of time, a mini-notation for writing them,
+    and an offline sample synthesizer that renders them to WAV. A clean-room,
+    MIT-licensed music live-coding engine in R, with an optional Rust
+    accelerator (extendr) for the Schroeder reverb.
+SystemRequirements: Cargo (Rust's package manager), rustc
+License: MIT + file LICENSE
+Encoding: UTF-8
+RoxygenNote: 7.3.1
+Config/rextendr/version: 0.5.0
+Depends: 
+    R (>= 4.2)
+Suggests: 
+    IRdisplay,
+    knitr,
+    rmarkdown,
+    shiny
+VignetteBuilder: knitr
