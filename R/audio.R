@@ -966,7 +966,9 @@ audio_tag <- function(samples, sr = SR) {
 ## rendered samples invisibly.
 #' Render and play audio in a notebook
 #'
-#' Render a pattern and display inline audio via IRdisplay when available (Jupyter with Ark/IRkernel); otherwise message and return the `<audio>` tag invisibly.
+#' Render a pattern and display inline audio via Ark's native display routine
+#' (Positron) or IRdisplay when available (Jupyter/IRkernel); otherwise message
+#' and return the `<audio>` tag invisibly.
 #'
 #' @param pat A pattern.
 #' @param seconds Seconds to render, default 8.
@@ -979,12 +981,26 @@ audio_tag <- function(samples, sr = SR) {
 maelstrom_listen <- function(pat, seconds = 8, cps = 0.5, sr = SR) {
   samples <- render(pat, cycles = seconds * cps, cps = cps, sr = sr)
   tag <- audio_tag(samples, sr)
-  if (in_jupyter_kernel()) {
+  if (in_ark_kernel()) {
+    .Call("ps_html_display_data", tag, "maelstrom", PACKAGE = "(embedding)")
+  } else if (in_jupyter_kernel()) {
     IRdisplay::display_html(tag)
   } else {
     message("not in a notebook kernel; returning the <audio> HTML tag invisibly.")
   }
   invisible(tag)
+}
+
+## TRUE when running inside Positron's Ark kernel. Ark never sets
+## jupyter.base_display_func, so IRdisplay cannot publish there; instead we
+## use Ark's internal display routine. The getNativeSymbolInfo guard makes
+## this fail safe (not fail loud) if Ark ever renames the routine.
+in_ark_kernel <- function() {
+  "tools:positron" %in% search() &&
+    isTRUE(tryCatch({
+      getNativeSymbolInfo("ps_html_display_data", PACKAGE = "(embedding)")
+      TRUE
+    }, error = function(e) FALSE))
 }
 
 ## TRUE when IRdisplay can actually publish: running inside a Jupyter kernel.
